@@ -1,5 +1,5 @@
   
-package com.bravo.rungps.interfaces;
+package com.bravo.rungps.ui;
 /** 
  * ClassName:MainActModel <br/> 
  * Function: TODO ADD FUNCTION. <br/> 

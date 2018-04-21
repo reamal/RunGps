@@ -1,4 +1,4 @@
-package com.bravo.rungps;
+package com.bravo.rungps.ui;
 
 import android.app.AlertDialog;
 import android.content.Context;
@@ -22,7 +22,6 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import java.util.ArrayList;
 import java.util.LinkedList;
 
 import com.baidu.mapapi.SDKInitializer;
@@ -39,13 +38,15 @@ import com.baidu.mapapi.map.OverlayOptions;
 import com.baidu.mapapi.map.Polyline;
 import com.baidu.mapapi.map.PolylineOptions;
 import com.baidu.mapapi.model.LatLng;
+import com.bravo.rungps.R;
 import com.bravo.rungps.adapter.LatAdapter;
 import com.bravo.rungps.adapter.MLocationListener;
 import com.bravo.rungps.bean.PositionBean;
-import com.bravo.rungps.interfaces.MainActView;
+import com.bravo.rungps.ui.base.BaseMVPActivity;
+import com.bravo.rungps.utils.Logger;
 
 
-public class MainActivity extends BaseActivity implements OnClickListener, MainActView {
+public class MainActivity extends BaseMVPActivity<MainActView,MainActPersenter> implements OnClickListener, MainActView {
 
     protected static final int EMPTY_MSG = 0;
     private MapView mMapView;
@@ -62,8 +63,6 @@ public class MainActivity extends BaseActivity implements OnClickListener, MainA
     private Button mBtnEnd;
     private BaiduMap mBaiduMap;
     private SDKReceiver mReceiver;
-
-    // private Location location;
 
     @Override
     protected void onResume() {
@@ -90,7 +89,6 @@ public class MainActivity extends BaseActivity implements OnClickListener, MainA
         super.onCreate(savedInstanceState);
         getWindow().requestFeature(Window.FEATURE_NO_TITLE);
         setContentView(R.layout.activity_main);
-        mActPersenter = new MainActPersenter(this);
         isAttch = true;
         initView();
         // 判断有没有Gps,有Gps给LocationManager赋值。
@@ -99,6 +97,11 @@ public class MainActivity extends BaseActivity implements OnClickListener, MainA
         initMap(savedInstanceState);
         initEvent();
         startTimeThread();
+    }
+
+    @Override
+    protected MainActPersenter createPersenter() {
+        return new MainActPersenter(this);
     }
 
     long runTime;
@@ -527,7 +530,6 @@ public class MainActivity extends BaseActivity implements OnClickListener, MainA
     // private boolean isFirstStart = true;
     // private LatAdapter mListThreadAdapter;
     private LocationManager locationManager;
-    private MainActPersenter mActPersenter;
 
     @Override
     public void onClick(View v) {

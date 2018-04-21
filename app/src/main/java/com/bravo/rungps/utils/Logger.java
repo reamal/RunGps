@@ -1,4 +1,4 @@
-package com.bravo.rungps;
+package com.bravo.rungps.utils;
 
 import android.util.Log;
 

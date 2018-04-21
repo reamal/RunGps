@@ -1,5 +1,5 @@
 
-package com.bravo.rungps;
+package com.bravo.rungps.ui;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -11,8 +11,7 @@ import com.baidu.mapapi.model.LatLng;
 import com.baidu.mapapi.utils.CoordinateConverter;
 import com.baidu.mapapi.utils.CoordinateConverter.CoordType;
 import com.bravo.rungps.bean.PositionBean;
-import com.bravo.rungps.interfaces.MainActModelListener;
-import com.bravo.rungps.interfaces.MainActView;
+import com.bravo.rungps.ui.base.BasePersenter;
 
 import android.location.Location;
 import android.location.LocationManager;
@@ -25,7 +24,7 @@ import android.location.LocationManager;
  * @author Administrator
  * @version
  */
-public class MainActPersenter implements MainActModelListener {
+public class MainActPersenter extends BasePersenter<MainActView> implements MainActModelListener {
 
     private MainActView mActView;
 

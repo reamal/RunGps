@@ -1,10 +1,11 @@
   
-package com.bravo.rungps;
+package com.bravo.rungps.ui.base;
 
 import com.baidu.mapapi.SDKInitializer;
 import com.baidu.mapapi.model.LatLng;
 import com.baidu.mapapi.utils.CoordinateConverter;
 import com.baidu.mapapi.utils.CoordinateConverter.CoordType;
+import com.bravo.rungps.utils.Logger;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;

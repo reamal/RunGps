@@ -1,8 +1,6 @@
   
-package com.bravo.rungps;
+package com.bravo.rungps.ui;
 
-
-import com.bravo.rungps.interfaces.MainActModel;
 
 /**
  * ClassName:MainActModelImp <br/> 
