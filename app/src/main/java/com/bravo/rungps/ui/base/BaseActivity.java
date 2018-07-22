@@ -75,9 +75,8 @@ public class BaseActivity extends FragmentActivity{
     
     /**
      * 构造广播监听类，监听 SDK key 验证以及网络异常广播
-     * 
-     * @author pengjiazhen
      *
+     * 百度sdk key 校验
      */
     public class SDKReceiver extends BroadcastReceiver {
         @Override

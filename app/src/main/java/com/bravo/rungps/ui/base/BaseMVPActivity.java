@@ -11,7 +11,7 @@ import android.os.Bundle;
  * @author Administrator
  * @version
  */
-public abstract class BaseMVPActivity<V extends BaseView, P extends BasePersenter<V>>
+public abstract class BaseMVPActivity<V extends BaseView, P extends BasePresenter<V>>
 		extends BaseActivity implements BaseView {
 
 	// Persenter类的实例。
@@ -21,7 +21,7 @@ public abstract class BaseMVPActivity<V extends BaseView, P extends BasePersente
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
-		mActPersenter = createPersenter();
+		mActPersenter = createPresenter();
 		if (mActPersenter != null) {
 			// BasePersenter类的方法。主要用于将View用弱引用赋值给P层的View对象
 			mActPersenter.attach((V) this);
@@ -29,7 +29,7 @@ public abstract class BaseMVPActivity<V extends BaseView, P extends BasePersente
 	}
 
 	// 子类实现，具体类型创建具体P层对象。
-	protected abstract P createPersenter();
+	protected abstract P createPresenter();
 
 	@Override
 	protected void onDestroy() {

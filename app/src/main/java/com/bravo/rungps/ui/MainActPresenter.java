@@ -1,4 +1,3 @@
-
 package com.bravo.rungps.ui;
 
 import java.util.LinkedList;
@@ -11,55 +10,33 @@ import com.baidu.mapapi.model.LatLng;
 import com.baidu.mapapi.utils.CoordinateConverter;
 import com.baidu.mapapi.utils.CoordinateConverter.CoordType;
 import com.bravo.rungps.bean.PositionBean;
-import com.bravo.rungps.ui.base.BasePersenter;
+import com.bravo.rungps.ui.base.BasePresenter;
 
+import android.Manifest;
+import android.annotation.SuppressLint;
+import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationManager;
+import android.support.v4.app.ActivityCompat;
 
 /**
- * ClassName:MainActPersenter <br/>
- * Function: TODO ADD FUNCTION. <br/>
+ * ClassName:MainActPresenter <br/>
+ * Function: Persenter. <br/>
  * Date: 2017年3月17日 下午2:46:10 <br/>
- * 
+ *
  * @author Administrator
  * @version
  */
-public class MainActPersenter extends BasePersenter<MainActView> implements MainActModelListener {
+public class MainActPresenter extends BasePresenter<MainActView> implements MainActModelListener {
 
     private MainActView mActView;
 
-    public MainActPersenter(MainActView mActView) {
+    public MainActPresenter(MainActView mActView) {
         super();
         this.mActView = mActView;
     }
 
-    public Location getLatLng(LocationManager locationManager) {
-        double latitude = 0.0;
-        double longitude = 0.0;
-        String provider;
 
-        List<String> providerList = locationManager.getProviders(true);
-        boolean isNet = providerList.contains(LocationManager.NETWORK_PROVIDER);
-        boolean isGps = providerList.contains(LocationManager.GPS_PROVIDER);
-        if (isNet) {// 网络提供器
-            provider = LocationManager.NETWORK_PROVIDER;
-        } else if (isGps) { // GPS提供器
-            provider = LocationManager.GPS_PROVIDER;
-        } else {
-            provider = null;
-        }
-
-        if (provider != null) {
-            Location location = locationManager.getLastKnownLocation(provider);
-            if (location == null) {
-                return null;
-            } else {
-                return location;
-            }
-        } else {
-            return null;
-        }
-    }
 
     /**
      * 标准的GPS经纬度坐标直接在地图上绘制会有偏移，这是测绘局和地图商设置的加密，要转换成百度地图坐标

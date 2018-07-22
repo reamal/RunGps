@@ -1,18 +1,13 @@
 package com.bravo.rungps.ui;
 
-import android.app.AlertDialog;
-import android.content.Context;
-import android.content.DialogInterface;
+import android.Manifest;
+import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Color;
 import android.location.Location;
-import android.location.LocationManager;
 import android.os.Bundle;
-import android.os.Handler;
 import android.os.Message;
-import android.os.SystemClock;
-import android.provider.Settings;
 import android.view.View;
 import android.view.Window;
 import android.view.View.OnClickListener;
@@ -20,9 +15,10 @@ import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import java.util.LinkedList;
+import java.util.Observable;
+import java.util.Observer;
 
 import com.baidu.mapapi.SDKInitializer;
 import com.baidu.mapapi.map.BaiduMap;
@@ -38,15 +34,19 @@ import com.baidu.mapapi.map.OverlayOptions;
 import com.baidu.mapapi.map.Polyline;
 import com.baidu.mapapi.map.PolylineOptions;
 import com.baidu.mapapi.model.LatLng;
+import com.bravo.rungps.MsgObservable;
 import com.bravo.rungps.R;
+import com.bravo.rungps.RunConstants;
 import com.bravo.rungps.adapter.LatAdapter;
-import com.bravo.rungps.adapter.MLocationListener;
+import com.bravo.rungps.bean.Information;
 import com.bravo.rungps.bean.PositionBean;
+import com.bravo.rungps.services.WorkService;
 import com.bravo.rungps.ui.base.BaseMVPActivity;
 import com.bravo.rungps.utils.Logger;
+import com.tbruyelle.rxpermissions2.RxPermissions;
 
 
-public class MainActivity extends BaseMVPActivity<MainActView,MainActPersenter> implements OnClickListener, MainActView {
+public class MainActivity extends BaseMVPActivity<MainActView, MainActPresenter> implements OnClickListener, MainActView, Observer {
 
     protected static final int EMPTY_MSG = 0;
     private MapView mMapView;
@@ -64,6 +64,13 @@ public class MainActivity extends BaseMVPActivity<MainActView,MainActPersenter> 
     private BaiduMap mBaiduMap;
     private SDKReceiver mReceiver;
 
+    private boolean isAttch;
+
+    private LatAdapter mListGpsLocationAdapter;
+
+    private LinkedList<LatLng> mPointListWithGps = new LinkedList<>();
+    private LinkedList<PositionBean> mMoveGpsDataList = new LinkedList<>();
+
     @Override
     protected void onResume() {
         super.onResume();
@@ -73,6 +80,7 @@ public class MainActivity extends BaseMVPActivity<MainActView,MainActPersenter> 
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        MsgObservable.getInstance().deleteObserver(this);
         isAttch = false;
         mMapView.onDestroy();
         unregisterReceiver(mReceiver);
@@ -89,237 +97,166 @@ public class MainActivity extends BaseMVPActivity<MainActView,MainActPersenter> 
         super.onCreate(savedInstanceState);
         getWindow().requestFeature(Window.FEATURE_NO_TITLE);
         setContentView(R.layout.activity_main);
+        MsgObservable.getInstance().addObserver(this);
         isAttch = true;
         initView();
-        // 判断有没有Gps,有Gps给LocationManager赋值。
-        initGPSWithLocationManager();
-        initListener();
         initMap(savedInstanceState);
         initEvent();
-        startTimeThread();
+        getCurrentLocation();
     }
+
 
     @Override
-    protected MainActPersenter createPersenter() {
-        return new MainActPersenter(this);
+    protected MainActPresenter createPresenter() {
+        return new MainActPresenter(this);
     }
 
-    long runTime;
+    private void initView() {
 
-    private void startTimeThread() {
-        Thread timeThead = new Thread(new Runnable() {
+        mMapView = (MapView) findViewById(R.id.mapView);
 
-            @Override
-            public void run() {
-                while (isAttch) {
-                    SystemClock.sleep(1000);
-                    if (!isPause) {
-                        runTime += 1000;
-                        mainHandler.sendEmptyMessage(EMPTY_MSG);
-                    }
-                }
+        mIvPosition = (ImageView) findViewById(R.id.iv_position);
+        mLvLocationLats = (ListView) findViewById(R.id.lv_location);
+        mTvDis = (TextView) findViewById(R.id.tv_distance);
+        mTvCalorie = (TextView) findViewById(R.id.tv_calorie);
+        mTvHeartRate = (TextView) findViewById(R.id.tv_heart_rate);
+        mTvHourV = (TextView) findViewById(R.id.tv_hour_v);
+        mTvTimes = (TextView) findViewById(R.id.tv_times);
+        mTvV = (TextView) findViewById(R.id.tv_v);
 
-            }
-        });
-        timeThead.start();
+        mBtnPause = (Button) findViewById(R.id.btn_pause);
+        mBtnStart = (Button) findViewById(R.id.btn_start);
+        mBtnEnd = (Button) findViewById(R.id.btn_end);
 
     }
 
-    private void initListener() {
+    private void initMap(Bundle savedInstanceState) {
 
-        if (locationManager == null) {
-            locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-        }
+        mMapView.onCreate(this, savedInstanceState);
+        // 初始化地图
+        mMapView.showZoomControls(false);
 
-        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 1,
-                locationGpsListener);
-        locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1000, 1,
-                locationNetListener);
-        // locationManager.requestLocationUpdates(LocationManager.PASSIVE_PROVIDER, 1000, 1,
-        // locationListener);
-    }
+        mBaiduMap = mMapView.getMap();
 
-    /**
-     * location的监听。
-     */
-    private MLocationListener locationNetListener = new MLocationListener() {
+        // 设置缩放级别
+        mBaiduMap.setMapStatus(
+                MapStatusUpdateFactory.newMapStatus(new MapStatus.Builder().zoom(19).build()));
+        // 开启定位图层
+        mBaiduMap.setMyLocationEnabled(true);
+        // 开启交通图层
+        mBaiduMap.setTrafficEnabled(false);
+        // 开启热力图层
+        mBaiduMap.setBaiduHeatMapEnabled(false);
 
-        // 当坐标改变时触发此函数，如果Provider传进相同的坐标，它就不会被触发
-        @Override
-        public void onLocationChanged(Location mlocation) {
-            if (mlocation != null) {
-                if (!isPause) {// 如果没有暂停，则记录数据。
-                    if (mMoveNetDataList != null && mMoveNetDataList.size() >= 1) {
-                        speed = mlocation.getSpeed();
-                        double latitude = mlocation.getLatitude();
-                        double longitude = mlocation.getLongitude();
-                        LatLng latLng = new LatLng(latitude, longitude);
-                        Logger.e(LTAG, "B_latLng : " + latLng.latitude + "," + latLng.longitude);
-                        latLng = gpsToBaidu(latLng);
-
-                        LatLng last = mPointListWithNet.getLast();
-                        PositionBean lastPosition = mMoveNetDataList.getLast();
-                        // 如果位置和上一次记录的位置点相同，则认为没有移动。
-                        if (last.latitude != latLng.latitude
-                                || last.longitude != latLng.longitude) {
-                            // 计算移动距离,和速度。
-                            PositionBean oncePosition = getMoveNetData(lastPosition, latLng);
-                            if (oncePosition == null) {
-                                showToast("点漂移了一次！");
-                            } else {
-                                mPointListWithNet.add(latLng);
-                                mMoveNetDataList.add(oncePosition);
-                                mListNetLocationAdapter.update(mMoveNetDataList);
-//                                updateListenerView();
-                                Logger.e(LTAG,
-                                        "TLocationLatLng : " + mPointListWithNet.size());
-                            }
-                        } else {
-                            Logger.e(LTAG, "未移动,LocationSpeed : " + speed);
-                            if (onces % 10 == 0) {
-                                showToast("未移动,LocationSpeed : " + speed);
-                                onces = 0;
-                            }
-                            onces++;
-                        }
-                    } else {
-                        firstGetLocation(mlocation);
-                    }
-
-                } else {// 如果暂停了，则toast提示。
-                    showToast("位置改变了一次，暂停状态未记录！");
-                }
-            }
-        }
-
-    };
-    /**
-     * location的监听。
-     */
-    private MLocationListener locationGpsListener = new MLocationListener() {
-
-        // 当坐标改变时触发此函数，如果Provider传进相同的坐标，它就不会被触发
-        @Override
-        public void onLocationChanged(Location mlocation) {
-            if (mlocation != null) {
-                if (!isPause) {// 如果没有暂停，则记录数据。
-                    if (mMoveGpsDataList != null && mMoveGpsDataList.size() >= 1) {
-
-                        speed = mlocation.getSpeed();
-                        double latitude = mlocation.getLatitude();
-                        double longitude = mlocation.getLongitude();
-                        LatLng latLng = new LatLng(latitude, longitude);
-                        Logger.e(LTAG, "B_latLng : " + latLng.latitude + "," + latLng.longitude);
-                        latLng = gpsToBaidu(latLng);
-                        
-                        PositionBean lastPosition = mMoveGpsDataList.getLast();
-                        // 如果位置和上一次记录的位置点相同，则认为没有移动。
-                        if (lastPosition.latlng.latitude != latLng.latitude
-                                || lastPosition.latlng.longitude != latLng.longitude) {
-                            // 计算移动距离,和速度。
-                            PositionBean oncePosition = getMoveGpsData(lastPosition, latLng);
-                            if (oncePosition == null) {
-                                showToast("点漂移了一次！");
-                            } else {
-                                mPointListWithGps.add(latLng);
-                                mMoveGpsDataList.add(oncePosition);
-                                mListGpsLocationAdapter.update(mMoveGpsDataList);
-                                updateListenerView();
-                            }
-                        } else {
-                            Logger.e(LTAG, "未移动,LocationSpeed : " + speed);
-                            if (onces % 10 == 0) {
-                                showToast("未移动,LocationSpeed : " + speed);
-                                onces = 0;
-                            }
-                            onces++;
-                        }
-                    } else {
-                        firstGetLocation(mlocation);
-                    }
-
-                } else {// 如果暂停了，则toast提示。
-                    showToast("位置改变了一次，暂停状态未记录！");
-                }
-            }
-        }
-
-    };
-
-    private PositionBean getMoveGpsData(PositionBean lastPosition, LatLng latLng) {
-        // TODO 计算经纬度变化一次时，的距离
-        long currentTime = System.currentTimeMillis();// 参数 当前时间：毫秒
-        Logger.e(LTAG, currentTime + "");
-        long pastTime = currentTime - lastPosition.currentTime;// 过去的时间：毫秒
-        mTotalTimes += pastTime;
-
-        float[] result = new float[3];
-
-        LatLng start = lastPosition.latlng;
-        LatLng end = latLng;
-        Location.distanceBetween(start.latitude, start.longitude, end.latitude, end.longitude,
-                result);
-        double distance = result[0];// 参数 距离 单位：米
-        mTotalDistance += distance;
-        double velocity = (distance * 1000) / pastTime;
-        // if (velocity > 10) {
-        // return null;
-        // } else {
-        return new PositionBean().setCurrentTime(currentTime).setDistance(distance)
-                .setLatlng(latLng).setVelocity(velocity).setPreGapTime(pastTime).setGpsSpeed(speed);
-        // }
+        IntentFilter iFilter = new IntentFilter();
+        iFilter.addAction(SDKInitializer.SDK_BROADTCAST_ACTION_STRING_PERMISSION_CHECK_ERROR);
+        iFilter.addAction(SDKInitializer.SDK_BROADCAST_ACTION_STRING_NETWORK_ERROR);
+        mReceiver = new SDKReceiver();
+        registerReceiver(mReceiver, iFilter);
 
     }
-    private PositionBean getMoveNetData(PositionBean lastPosition, LatLng latLng) {
-        // TODO 计算经纬度变化一次时，的距离
-        long currentTime = System.currentTimeMillis();// 参数 当前时间：毫秒
-        Logger.e(LTAG, currentTime + "");
-        long pastTime = currentTime - lastPosition.currentTime;// 过去的时间：毫秒
-//        mTotalTimes += pastTime;
-        
-        float[] result = new float[3];
-        
-        LatLng start = lastPosition.latlng;
-        LatLng end = latLng;
-        Location.distanceBetween(start.latitude, start.longitude, end.latitude, end.longitude,
-                result);
-        double distance = result[0];// 参数 距离 单位：米
-//        mTotalDistance += distance;
-        double velocity = (distance * 1000) / pastTime;
-        // if (velocity > 10) {
-        // return null;
-        // } else {
-        return new PositionBean().setCurrentTime(currentTime).setDistance(distance)
-                .setLatlng(latLng).setVelocity(velocity).setPreGapTime(pastTime).setGpsSpeed(speed);
-        // }
-        
-    }
 
-    private boolean isPause = true;
+
+    private boolean isStop = true;
 
     private void initEvent() {
-        if (locationManager == null) {
-            locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-        }
-
-        Location location = mActPersenter.getLatLng(locationManager);
-        if (location != null) {
-            firstGetLocation(location);
-        }
 
         mIvPosition.setOnClickListener(this);
         mBtnStart.setOnClickListener(this);
         mBtnPause.setOnClickListener(this);
         mBtnEnd.setOnClickListener(this);
+
         mListGpsLocationAdapter = new LatAdapter(this, mMoveGpsDataList);
-        mLvThreadLats.setAdapter(mListGpsLocationAdapter);
-        mListNetLocationAdapter = new LatAdapter(this, mMoveNetDataList);
-        mLvLocationLats.setAdapter(mListNetLocationAdapter);
-        // updateThreadView();
+        mLvLocationLats.setAdapter(mListGpsLocationAdapter);
+    }
+
+    @SuppressLint("CheckResult")
+    private void getCurrentLocation() {
+        RxPermissions rxPermissions = new RxPermissions(this);
+        rxPermissions.request(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+                .subscribe(granted -> {
+                    if (granted) {
+                        //有权限了。
+                        startService(new Intent(MainActivity.this, WorkService.class));
+                    } else {
+                        //没有权限。
+                        showToast("没有权限");
+                    }
+                });
+    }
+
+    /**
+     * 接收service的信息。
+     *
+     * @param o
+     * @param arg
+     */
+    @Override
+    public void update(Observable o, Object arg) {
+        Logger.d("lilee","update once");
+        if (o instanceof MsgObservable) {
+            if (arg instanceof Message) {
+                Message msg = (Message) arg;
+                switch (msg.what) {
+                    case RunConstants.FIRST_LOCATION_MSG:
+                        if (msg.obj instanceof Location && msg.obj != null) {
+                            runOnUiThread(() -> firstGetLocation((Location) msg.obj));
+                        }
+                        break;
+                    case RunConstants.RUN_FIRST_LOCATION_MSG:
+                        if (msg.obj instanceof Location && msg.obj != null) {
+                            runOnUiThread(() -> runGetFirstLocation((Location) msg.obj));
+                        }
+                        break;
+                    case RunConstants.RUN_LOCATION_MSG:
+                        if (msg.obj instanceof Information && msg.obj != null) {
+                            runOnUiThread(() -> updateLocation((Information) msg.obj));
+                        }
+                        break;
+                }
+            }
+        }
+    }
+
+    private void updateLocation(Information info) {
+        //位置变化
+        mPointListWithGps.clear();
+        mPointListWithGps.addAll(info.mLocationList);
+        mMoveGpsDataList.add(info.mPositionBean);
+        mListGpsLocationAdapter.notifyDataSetChanged();
+        moveMap(mMoveGpsDataList);
+        updateListenerView();
+    }
+
+
+    private void runGetFirstLocation(Location location) {
+        double latitude = location.getLatitude();
+        double longitude = location.getLongitude();
+        LatLng latLng = new LatLng(latitude, longitude);
+        latLng = mActPersenter.gpsToBaidu(latLng);
+        mPointListWithGps.add(latLng);
+
+        PositionBean positionBean =
+                new PositionBean().setLatlng(latLng).setCurrentTime(System.currentTimeMillis())
+                        .setDistance(0).setVelocity(0).setPreGapTime(0).setGpsSpeed(speed);
+
+        mMoveGpsDataList.add(positionBean);
+
+        if (latLng != null) {
+            MyLocationData locData = new MyLocationData.Builder().accuracy(40)
+                    // 此处设置开发者获取到的方向信息，顺时针0-360
+                    .direction(100).latitude(latLng.latitude).longitude(latLng.longitude)
+                    .build();
+            mBaiduMap.setMyLocationData(locData);
+        }
+
+        // 将地图移动到LatLng点。
+        moveMap(mMoveGpsDataList);
         updateListenerView();
     }
 
     private void firstGetLocation(Location location) {
+        mPointListWithGps.clear();
         speed = location.getSpeed();
         double latitude = location.getLatitude();
         double longitude = location.getLongitude();
@@ -330,12 +267,19 @@ public class MainActivity extends BaseMVPActivity<MainActView,MainActPersenter> 
                 new PositionBean().setLatlng(latLng).setCurrentTime(System.currentTimeMillis())
                         .setDistance(0).setVelocity(0).setPreGapTime(0).setGpsSpeed(speed);
 
-        mPointListWithNet.add(latLng);
-        mPointListWithGps.add(latLng);
-        mMoveNetDataList.add(positionBean);
         mMoveGpsDataList.add(positionBean);
+
+        if (latLng != null) {
+            MyLocationData locData = new MyLocationData.Builder().accuracy(40)
+                    // 此处设置开发者获取到的方向信息，顺时针0-360
+                    .direction(100).latitude(latLng.latitude).longitude(latLng.longitude)
+                    .build();
+            mBaiduMap.setMyLocationData(locData);
+        }
+
         // 将地图移动到LatLng点。
         moveMap(mMoveGpsDataList);
+        updateListenerView();
     }
 
     // 将地图移动到list的最后一个点。
@@ -351,49 +295,6 @@ public class MainActivity extends BaseMVPActivity<MainActView,MainActPersenter> 
     private float mTotalDistance;
     private long mTotalTimes;
     private float speed;
-
-    // private void updateThreadView() {
-    //
-    // mTvDis.setText("距离 ： " + distance);
-    // mTvV.setText("配速 ： " + speed + "m/s");
-    // mTvTimes.setText("时间 ： " + getFormatTime(times));
-    //
-    // mBaiduMap.clear();
-    // // if (mPointListWithLocation != null && mPointListWithLocation.size() > 1) {
-    // // OverlayOptions polylineOption =
-    // // new PolylineOptions().color(R.color.red).points(mPointListWithLocation);
-    // // mBaiduMap.addOverlay(polylineOption);
-    // // }
-    //
-    // if (mPointListWithThread != null && mPointListWithThread.size() > 1) {
-    // OverlayOptions polylineOption =
-    // new PolylineOptions().color(Color.RED).points(mPointListWithThread);
-    // mBaiduMap.addOverlay(polylineOption);
-    // }
-    //
-    // // if (mPointListWithLocation != null && mPointListWithLocation.size() > 0) {
-    // // LatLng latLng = mPointListWithLocation.get(0);
-    // // if (latLng != null) {
-    // // MyLocationData locData = new MyLocationData.Builder().accuracy(40)
-    // // // 此处设置开发者获取到的方向信息，顺时针0-360
-    // // .direction(100).latitude(latLng.latitude).longitude(latLng.longitude)
-    // // .build();
-    // // mBaiduMap.setMyLocationData(locData);
-    // // moveMap(mPointListWithLocation);
-    // // }
-    // // }
-    //
-    // if (mPointListWithThread != null && mPointListWithThread.size() > 0) {
-    // LatLng latLng = mPointListWithThread.getLast();
-    // if (latLng != null) {
-    // MyLocationData locData = new MyLocationData.Builder().accuracy(40)
-    // // 此处设置开发者获取到的方向信息，顺时针0-360
-    // .direction(100).latitude(latLng.latitude).longitude(latLng.longitude)
-    // .build();
-    // mBaiduMap.setMyLocationData(locData);
-    // }
-    // }
-    // }
 
     private void updateListenerView() {
         if (mMoveGpsDataList != null && mMoveGpsDataList.size() >= 1) {
@@ -425,80 +326,8 @@ public class MainActivity extends BaseMVPActivity<MainActView,MainActPersenter> 
                 mBaiduMap.setMyLocationData(locData);
             }
         }
-
     }
 
-    private void initMap(Bundle savedInstanceState) {
-
-        mMapView.onCreate(this, savedInstanceState);
-        // 初始化地图
-        mMapView.showZoomControls(false);
-
-        mBaiduMap = mMapView.getMap();
-
-        // 设置缩放级别
-        mBaiduMap.setMapStatus(
-                MapStatusUpdateFactory.newMapStatus(new MapStatus.Builder().zoom(19).build()));
-        // 开启定位图层
-        mBaiduMap.setMyLocationEnabled(true);
-        // 开启交通图层
-        mBaiduMap.setTrafficEnabled(false);
-        // 开启热力图层
-        mBaiduMap.setBaiduHeatMapEnabled(false);
-
-        IntentFilter iFilter = new IntentFilter();
-        iFilter.addAction(SDKInitializer.SDK_BROADTCAST_ACTION_STRING_PERMISSION_CHECK_ERROR);
-        iFilter.addAction(SDKInitializer.SDK_BROADCAST_ACTION_STRING_NETWORK_ERROR);
-        mReceiver = new SDKReceiver();
-        registerReceiver(mReceiver, iFilter);
-    }
-
-    private void initGPSWithLocationManager() {
-        LocationManager lm = (LocationManager) this.getSystemService(Context.LOCATION_SERVICE);
-        // 判断GPS模块是否开启，如果没有则开启
-        if (!lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-            Toast.makeText(MainActivity.this, "请打开GPS", Toast.LENGTH_SHORT).show();
-            AlertDialog.Builder dialog = new AlertDialog.Builder(this);
-            dialog.setMessage("请打开GPS");
-            dialog.setPositiveButton("确定", new DialogInterface.OnClickListener() {
-                @Override
-                public void onClick(DialogInterface arg0, int arg1) {
-                    // 转到手机设置界面，用户设置GPS
-                    Intent intent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
-                    startActivityForResult(intent, 0); // 设置完成后返回到原来的界面
-                }
-            });
-            dialog.setNeutralButton("取消", new DialogInterface.OnClickListener() {
-                @Override
-                public void onClick(DialogInterface arg0, int arg1) {
-                    arg0.dismiss();
-                }
-            });
-            dialog.show();
-        } else {
-            locationManager = lm;
-        }
-    }
-
-    private void initView() {
-
-        mMapView = (MapView) findViewById(R.id.mapView);
-
-        mIvPosition = (ImageView) findViewById(R.id.iv_position);
-        mLvLocationLats = (ListView) findViewById(R.id.lv_location);
-        mLvThreadLats = (ListView) findViewById(R.id.lv_thread);
-        mTvDis = (TextView) findViewById(R.id.tv_distance);
-        mTvCalorie = (TextView) findViewById(R.id.tv_calorie);
-        mTvHeartRate = (TextView) findViewById(R.id.tv_heart_rate);
-        mTvHourV = (TextView) findViewById(R.id.tv_hour_v);
-        mTvTimes = (TextView) findViewById(R.id.tv_times);
-        mTvV = (TextView) findViewById(R.id.tv_v);
-
-        mBtnPause = (Button) findViewById(R.id.btn_pause);
-        mBtnStart = (Button) findViewById(R.id.btn_start);
-        mBtnEnd = (Button) findViewById(R.id.btn_end);
-
-    }
 
     private void setDistance() {
         if (mPointListWithGps == null) {
@@ -518,47 +347,30 @@ public class MainActivity extends BaseMVPActivity<MainActView,MainActPersenter> 
         Location.distanceBetween(start.latitude, start.longitude, end.latitude, end.longitude,
                 result);
         mTotalDistance += result[0];
-
     }
 
-    private LinkedList<LatLng> mPointListWithGps = new LinkedList<>();
-    private LinkedList<LatLng> mPointListWithNet = new LinkedList<>();
-    private LinkedList<PositionBean> mMoveNetDataList = new LinkedList<>();
-    private LinkedList<PositionBean> mMoveGpsDataList = new LinkedList<>();
-    // private LinkedList<LatLng> mPointListWithThread = new LinkedList<>();
-
-    // private boolean isFirstStart = true;
-    // private LatAdapter mListThreadAdapter;
-    private LocationManager locationManager;
 
     @Override
     public void onClick(View v) {
         // 点击事件
         switch (v.getId()) {
             case R.id.iv_position:
-                // moveMap(mPointListWithLocation.size() >= mPointListWithThread.size()
-                // ? mPointListWithLocation : mPointListWithThread);
                 moveMap(mMoveGpsDataList);
                 break;
             case R.id.btn_start:
-                isPause = !isPause;
-                if (isPause) {
+                isStop = !isStop;
+                if (isStop) {
                     mBtnStart.setText("Start");
                 } else {
-                    mBtnStart.setText("Pause");
+                    mBtnStart.setText("Stop");
                 }
-                // if (isFirstStart) {
-                // startThread();
-                // isFirstStart = false;
-                // } else {
-                //
-                // }
+                WorkService.isRunStop = isStop;
                 break;
             case R.id.btn_pause:
-                isPause = true;
+                isStop = true;
                 break;
             case R.id.btn_end:
-                isPause = true;
+                isStop = true;
                 break;
 
             default:
@@ -566,71 +378,4 @@ public class MainActivity extends BaseMVPActivity<MainActView,MainActPersenter> 
         }
 
     }
-
-    int onces = 0;
-    private ListView mLvThreadLats;
-    private LatAdapter mListNetLocationAdapter;
-    private LatAdapter mListGpsLocationAdapter;
-    private boolean isAttch;
-    private Handler mainHandler = new Handler() {
-        public void handleMessage(Message msg) {
-            switch (msg.what) {
-                case EMPTY_MSG:
-                    mTvTimes.setText("时间 ： " + getFormatTime(runTime));
-                    break;
-
-                default:
-                    break;
-            }
-        };
-    };
-    // private void startThread() {
-    // Thread timeThread = new Thread(new Runnable() {
-    //
-    // @Override
-    // public void run() {
-    // while (isAttch) {
-    // SystemClock.sleep(1000);
-    // if (!isPause) {
-    // times += 1000;
-    // Location location = mActPersenter.getLatLng(locationManager);
-    // if (location == null) {
-    // continue;
-    // }
-    // speed = location.getSpeed();
-    // double latitude = location.getLatitude();
-    // double longitude = location.getLongitude();
-    // LatLng latLng = new LatLng(latitude, longitude);
-    // latLng = mActPersenter.gpsToBaidu(latLng);
-    //
-    // LatLng last = mPointListWithThread.getLast();
-    //
-    // if (last.latitude != latLng.latitude
-    // || last.longitude != latLng.longitude) {
-    // mPointListWithThread.add(latLng);
-    // mListThreadAdapter.update(mPointListWithThread);
-    // updateThreadView();
-    // Logger.e(LTAG, "ThreadLatLng : " + mPointListWithThread.size());
-    // } else {
-    // if (onces % 20 == 0) {
-    // mainHandler.post(new Runnable() {
-    //
-    // @Override
-    // public void run() {
-    // Logger.e(LTAG, "未移动,speed : " + speed);
-    // showToast("未移动,speed : " + speed);
-    // }
-    // });
-    // onces = 0;
-    // }
-    // onces++;
-    //
-    // }
-    // }
-    // }
-    //
-    // }
-    // });
-    // timeThread.start();
-    // }
 }

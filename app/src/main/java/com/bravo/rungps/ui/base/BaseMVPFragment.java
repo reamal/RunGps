@@ -13,7 +13,7 @@ import android.support.v4.app.Fragment;
  * @author Administrator
  * @version
  */
-public abstract class BaseMVPFragment<V extends BaseView, P extends BasePersenter<V>>
+public abstract class BaseMVPFragment<V extends BaseView, P extends BasePresenter<V>>
         extends Fragment implements BaseView{
     // Persenter类的实例。
     public P mFragPersenter;

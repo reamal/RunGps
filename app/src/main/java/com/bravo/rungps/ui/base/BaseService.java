@@ -15,7 +15,7 @@ import android.widget.Toast;
  * @author Administrator
  * @version
  */
-public abstract class BaseService<V extends BaseView, P extends BasePersenter<V>> extends Service
+public abstract class BaseService<V extends BaseView, P extends BasePresenter<V>> extends Service
         implements BaseView {
 
     protected final String LTAG = BaseService.this.getClass().getSimpleName();
@@ -28,7 +28,7 @@ public abstract class BaseService<V extends BaseView, P extends BasePersenter<V>
     @Override
     public void onCreate() {
         super.onCreate();
-        mSerPersenter = createPersenter();
+        mSerPersenter = createPresenter();
         if (mSerPersenter != null) {
             // BasePersenter类的方法。主要用于将View用弱引用赋值给P层的View对象
             mSerPersenter.attach((V) this);
@@ -37,7 +37,7 @@ public abstract class BaseService<V extends BaseView, P extends BasePersenter<V>
     }
 
     // 子类实现，具体类型创建具体P层对象。
-    protected abstract P createPersenter();
+    protected abstract P createPresenter();
 
     @Override
     public void onDestroy() {

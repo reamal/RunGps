@@ -3,19 +3,19 @@ package com.bravo.rungps.ui.base;
 import java.lang.ref.WeakReference;
 
 /**
- * ClassName:BasePersenter <br/>
+ * ClassName:BasePresenter <br/>
  * Function: Persenter层的基类，主要实现View层引用的attach和detach. <br/>
  * Date: 2016年12月23日 上午11:02:12 <br/>
  * 
  * @author Administrator
  * @version
  */
-public abstract class BasePersenter<T extends BaseView> {
+public abstract class BasePresenter<T extends BaseView> {
 
 	// 弱引用的View
 	public WeakReference<T> mActView;
 
-	public BasePersenter() {
+	public BasePresenter() {
 		super();
 	}
 
