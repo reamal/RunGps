@@ -244,7 +244,7 @@ public class WorkService extends BaseService<WorkSerView, WorkSerPresenter> impl
         // 当坐标改变时触发此函数，如果Provider传进相同的坐标，它就不会被触发
         @Override
         public void onLocationChanged(final Location mlocation) {
-            if (mlocation == null ){
+            if (mlocation == null) {
                 return;
             }
             if (!isRunStop) {
@@ -285,6 +285,16 @@ public class WorkService extends BaseService<WorkSerView, WorkSerPresenter> impl
                             }
 
                         } else {
+
+                            double latitude = mlocation.getLatitude();
+                            double longitude = mlocation.getLongitude();
+                            LatLng latLng = new LatLng(latitude, longitude);
+                            latLng = mSerPersenter.gpsToBaidu(latLng);
+                            mlocation.setLatitude(latLng.latitude);
+                            mlocation.setLongitude(latLng.longitude);
+
+                            mLocationList.add(latLng);
+
                             Message msg = Message.obtain();
                             msg.what = RUN_FIRST_LOCATION_MSG;
                             msg.obj = mlocation;
@@ -299,6 +309,9 @@ public class WorkService extends BaseService<WorkSerView, WorkSerPresenter> impl
             } else {
                 // showToast("位置改变了一次，暂停状态未记录！");
                 preLocation = null;
+                if (mLocationList.size() > 0) {
+                    mLocationList.clear();
+                }
                 Message msg = Message.obtain();
                 msg.what = FIRST_LOCATION_MSG;
                 msg.obj = mlocation;
