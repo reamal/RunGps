@@ -3,4 +3,4 @@
     我是用的是debug.keystore申请的appkey，如果运行时不显示地图，请手动到百度地图申请appkey后更换掉Manifest文件中的appkey。
 * Demo截图
 
-<img src="https://github.com/BravoLee/RunGps/blob/master/images/S71024-234533.jpg" height="480px" width="270px" >     <img src="https://github.com/BravoLee/RunGps/blob/master/images/S71024-234707.jpg" height="480px" width="270px" >     <img src="https://github.com/BravoLee/RunGps/blob/master/images/S71024-234810.jpg" height="480px" width="270px">
+<img src="https://github.com/BravoLee/RunGps/blob/master/images/rungps.png" height="480px" width="270px" >
